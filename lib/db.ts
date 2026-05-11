@@ -378,10 +378,10 @@ export async function getAllAlbumSlugs(): Promise<{ artistSlug: string; albumSlu
 
   if (!data) return [];
 
-  return (data as Array<{ slug: string; artists: { slug: string } }>).map((row) => ({
-    artistSlug: row.artists.slug,
+  return (data as unknown as Array<{ slug: string; artists: { slug: string }[] }>).map((row) => ({
+    artistSlug: Array.isArray(row.artists) ? row.artists[0]?.slug : (row.artists as unknown as { slug: string })?.slug,
     albumSlug: row.slug,
-  }));
+  })).filter((r) => r.artistSlug);
 }
 
 export async function searchArtists(query: string): Promise<Artist[]> {
