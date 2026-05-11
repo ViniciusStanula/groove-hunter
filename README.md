@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ScoreStack — Music Album Score Aggregator
 
-## Getting Started
+Aggregated critic scores for music albums, pulling from Last.fm, Album of the Year, Metacritic, and Pitchfork into a single weighted score.
 
-First, run the development server:
+## Setup
+
+### 1. Clone / Download
+
+```bash
+git clone <repo-url>
+cd test-site
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` and fill in:
+
+- `LASTFM_API_KEY` — Get a free API key at [last.fm/api](https://www.last.fm/api/account/create)
+- `REFRESH_SECRET` — Choose any secret string to protect the refresh endpoint
+
+### 4. Start the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 5. Seed data
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The database starts empty. Use the refresh API to populate it.
 
-## Learn More
+**Seed all top artists** (Taylor Swift, Kendrick Lamar, Beyoncé, The Beatles, Radiohead):
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+curl -X POST http://localhost:3000/api/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"secret": "your_secret_token_here"}'
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Seed a specific artist:**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+curl -X POST http://localhost:3000/api/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"secret": "your_secret_token_here", "artist": "Taylor Swift"}'
+```
 
-## Deploy on Vercel
+> Note: Seeding respects rate limits across all scrapers and may take several minutes per artist.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 6. Browse
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Homepage: [http://localhost:3000](http://localhost:3000) — Top ranked albums grid
+- Artist page: `http://localhost:3000/artists/{artist-slug}`
+- Album page: `http://localhost:3000/albums/{artist-slug}/{album-slug}`
+
+## Score Weights
+
+| Source            | Weight |
+|-------------------|--------|
+| Album of the Year | 35%    |
+| Metacritic        | 30%    |
+| Last.fm           | 20%    |
+| Pitchfork         | 15%    |
+
+## Architecture
+
+- **Next.js 15** App Router with Server Components
+- **SQLite** via `better-sqlite3` for local caching
+- **Scrapers** for Last.fm (official API), Album of the Year, Metacritic, Pitchfork
+- **No client-side data fetching** — all pages are server-rendered
+
+## Project Structure
+
+```
+lib/
+  db.ts              # SQLite database layer
+  slugify.ts         # URL slug utilities
+  refresh.ts         # Refresh orchestrator
+  scrapers/
+    lastfm.ts        # Last.fm API scraper
+    albumoftheyear.ts
+    metacritic.ts
+    pitchfork.ts
+app/
+  layout.tsx         # Root layout with header/footer
+  page.tsx           # Homepage — top albums grid
+  artists/[slug]/
+    page.tsx         # Artist page — album list
+  albums/[artist]/[album]/
+    page.tsx         # Album page — score breakdown
+  api/
+    refresh/route.ts # POST /api/refresh
+    search/route.ts  # GET /api/search?q=
+components/
+  SearchBar.tsx      # Client-side search with keyboard nav
+```
