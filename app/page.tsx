@@ -12,16 +12,16 @@ export default async function HomePage() {
           className="text-xs font-bold tracking-widest text-[#E8FF3A] uppercase"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Notas Agregadas da Crítica
+          Aggregated Critic Scores
         </p>
         <h1
           className="text-4xl sm:text-5xl lg:text-6xl font-normal text-zinc-50 leading-none tracking-tight"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Álbuns Mais Bem Avaliados
+          Top Rated Albums
         </h1>
         <p className="text-zinc-400 max-w-lg text-sm mt-2">
-          Notas ponderadas do TheAudioDB, Discogs e CritiqueBrainz — um único número que corta o ruído.
+          Weighted scores from TheAudioDB, Discogs and CritiqueBrainz — one number that cuts through the noise.
         </p>
       </div>
 
@@ -44,21 +44,21 @@ export default async function HomePage() {
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-zinc-300 text-lg font-medium mb-2">Nenhum álbum ainda</p>
+            <p className="text-zinc-300 text-lg font-medium mb-2">No albums yet</p>
             <p className="text-zinc-500 text-sm max-w-sm">
-              Popule o banco de dados enviando uma requisição{' '}
+              Populate the database by sending a{' '}
               <code className="text-[#E8FF3A] bg-zinc-900 px-1.5 py-0.5 text-xs rounded">
                 POST
               </code>{' '}
-              para{' '}
+              request to{' '}
               <code className="text-[#E8FF3A] bg-zinc-900 px-1.5 py-0.5 text-xs rounded">
                 /api/refresh
               </code>{' '}
-              com seu token secreto.
+              with your secret token.
             </p>
           </div>
           <div className="mt-2 bg-zinc-900 border border-zinc-800 p-4 text-xs font-mono text-zinc-400 max-w-sm w-full">
-            <p className="text-zinc-600 mb-1"># Indexar os principais artistas</p>
+            <p className="text-zinc-600 mb-1"># Index top artists</p>
             <p>
               curl -X POST /api/refresh \{' '}
               <br />
@@ -100,13 +100,13 @@ export default async function HomePage() {
           className="text-xs font-bold tracking-widest text-zinc-600 uppercase"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Escala de Notas
+          Score Scale
         </p>
         <div className="flex gap-4 flex-wrap">
           {[
-            { label: 'Excelente', range: '75–100', color: 'bg-[#E8FF3A]', text: 'text-zinc-900' },
-            { label: 'Bom', range: '50–74', color: 'bg-amber-400', text: 'text-zinc-900' },
-            { label: 'Ruim', range: '0–49', color: 'bg-red-600', text: 'text-zinc-100' },
+            { label: 'Excellent', range: '75–100', color: 'bg-[#E8FF3A]', text: 'text-zinc-900' },
+            { label: 'Good', range: '50–74', color: 'bg-amber-400', text: 'text-zinc-900' },
+            { label: 'Poor', range: '0–49', color: 'bg-red-600', text: 'text-zinc-100' },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-2">
               <span

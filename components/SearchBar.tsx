@@ -33,7 +33,6 @@ export default function SearchBar() {
 
   const debouncedQuery = useDebounce(query, 300);
 
-  // Fetch search results
   useEffect(() => {
     if (!debouncedQuery.trim()) {
       setResults(null);
@@ -63,7 +62,6 @@ export default function SearchBar() {
     };
   }, [debouncedQuery]);
 
-  // Click outside to close
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -77,7 +75,6 @@ export default function SearchBar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Build flat list of navigable items
   const items: Array<{ type: 'artist'; slug: string; label: string } | { type: 'album'; artistSlug: string; albumSlug: string; label: string; sub: string }> =
     [];
 
@@ -135,9 +132,7 @@ export default function SearchBar() {
 
   return (
     <div ref={containerRef} className="relative w-full">
-      {/* Input */}
       <div className="relative flex items-center">
-        {/* Search icon */}
         <svg
           className="absolute left-3 w-3.5 h-3.5 text-zinc-600 pointer-events-none"
           fill="none"
@@ -161,19 +156,18 @@ export default function SearchBar() {
           onFocus={() => {
             if (results && items.length > 0) setOpen(true);
           }}
-          placeholder="Buscar artistas e álbuns…"
+          placeholder="Search artists and albums…"
           className="w-full h-9 pl-9 pr-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 focus:outline-none text-sm text-zinc-200 placeholder:text-zinc-600 transition-colors"
           style={{ fontFamily: 'var(--font-body)' }}
           autoComplete="off"
           spellCheck={false}
-          aria-label="Buscar artistas e álbuns"
+          aria-label="Search artists and albums"
           aria-expanded={open}
           aria-haspopup="listbox"
           role="combobox"
           aria-autocomplete="list"
         />
 
-        {/* Loading spinner / clear */}
         <div className="absolute right-3 flex items-center">
           {loading ? (
             <svg
@@ -204,7 +198,7 @@ export default function SearchBar() {
                 inputRef.current?.focus();
               }}
               className="text-zinc-600 hover:text-zinc-400 transition-colors"
-              aria-label="Limpar busca"
+              aria-label="Clear search"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -214,7 +208,6 @@ export default function SearchBar() {
         </div>
       </div>
 
-      {/* Dropdown */}
       {open && (
         <div
           className="absolute top-full left-0 right-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 shadow-2xl max-h-80 overflow-y-auto"
@@ -222,7 +215,7 @@ export default function SearchBar() {
         >
           {!hasResults ? (
             <div className="px-4 py-8 text-center text-sm text-zinc-600">
-              Nenhum resultado para &ldquo;{query}&rdquo;
+              No results for &ldquo;{query}&rdquo;
             </div>
           ) : (
             <>
@@ -232,7 +225,7 @@ export default function SearchBar() {
                     className="px-3 py-1.5 text-xs font-bold tracking-widest text-zinc-600 uppercase border-b border-zinc-800"
                     style={{ fontFamily: 'var(--font-mono)' }}
                   >
-                    Artistas
+                    Artists
                   </div>
                   {results.artists.map((artist) => {
                     const idx = items.findIndex(
@@ -279,7 +272,7 @@ export default function SearchBar() {
                     }`}
                     style={{ fontFamily: 'var(--font-mono)' }}
                   >
-                    Álbuns
+                    Albums
                   </div>
                   {results.albums.map((album) => {
                     const idx = items.findIndex(

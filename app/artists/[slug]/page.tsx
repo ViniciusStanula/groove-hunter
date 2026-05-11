@@ -19,10 +19,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const artist = await getArtistBySlug(slug);
-  if (!artist) return { title: 'Artista Não Encontrado' };
+  if (!artist) return { title: 'Artist Not Found' };
   return {
-    title: `${artist.name} — Álbuns | ScoreStack`,
-    description: `Veja todos os álbuns de ${artist.name} com notas agregadas da crítica.`,
+    title: `${artist.name} — Albums | The Groove Hunter`,
+    description: `View all albums by ${artist.name} with aggregated critic scores.`,
   };
 }
 
@@ -113,7 +113,7 @@ export default async function ArtistPage({
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 mb-8 text-xs text-zinc-600">
         <Link href="/" className="hover:text-[#E8FF3A] transition-colors">
-          Início
+          Home
         </Link>
         <span>/</span>
         <span className="text-zinc-400">{artist.name}</span>
@@ -160,7 +160,7 @@ export default async function ArtistPage({
               className="text-xs font-bold tracking-widest text-[#E8FF3A] uppercase"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              Artista
+              Artist
             </p>
             <h1
               className="text-5xl sm:text-6xl lg:text-7xl font-normal text-zinc-50 leading-none tracking-tight"
@@ -179,7 +179,7 @@ export default async function ArtistPage({
                   {albums.length}
                 </p>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">
-                  Álbuns
+                  Albums
                 </p>
               </div>
               {topScore !== null && (
@@ -191,7 +191,7 @@ export default async function ArtistPage({
                     {topScore}
                   </p>
                   <p className="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">
-                    Melhor Nota
+                    Best Score
                   </p>
                 </div>
               )}
@@ -204,7 +204,7 @@ export default async function ArtistPage({
                     {avgScore}
                   </p>
                   <p className="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">
-                    Nota Média
+                    Avg Score
                   </p>
                 </div>
               )}
@@ -241,7 +241,7 @@ export default async function ArtistPage({
           className="text-xs font-bold tracking-widest text-zinc-500 uppercase shrink-0"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Discografia
+          Discography
         </p>
         <div className="flex-1 h-px bg-zinc-800" />
       </div>
@@ -249,7 +249,7 @@ export default async function ArtistPage({
       {/* Albums table */}
       {albums.length === 0 ? (
         <div className="text-center py-16 text-zinc-500 border border-dashed border-zinc-800">
-          Nenhum álbum indexado ainda para este artista.
+          No albums indexed yet for this artist.
         </div>
       ) : (
         <div className="space-y-px">
@@ -260,9 +260,9 @@ export default async function ArtistPage({
           >
             <span>#</span>
             <span />
-            <span>Álbum</span>
-            <span className="text-right">Nota</span>
-            <span>Fontes</span>
+            <span>Album</span>
+            <span className="text-right">Score</span>
+            <span>Sources</span>
           </div>
 
           {albums.map((album, i) => (

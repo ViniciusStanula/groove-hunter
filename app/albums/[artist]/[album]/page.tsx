@@ -19,10 +19,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { artist, album } = await params;
   const data = await getAlbumWithScores(artist, album);
-  if (!data) return { title: 'Álbum Não Encontrado' };
+  if (!data) return { title: 'Album Not Found' };
   return {
-    title: `${data.title} por ${data.artistName} — ScoreStack`,
-    description: `Nota agregada da crítica para ${data.title} por ${data.artistName}. Nota: ${data.aggregateScore ?? 'N/A'}/100.`,
+    title: `${data.title} by ${data.artistName} — The Groove Hunter`,
+    description: `Aggregated critic score for ${data.title} by ${data.artistName}. Score: ${data.aggregateScore ?? 'N/A'}/100.`,
   };
 }
 
@@ -88,7 +88,7 @@ const FORMULA: Array<{ key: string; label: string; weight: number; color: string
   { key: 'theaudiodb',   label: 'TheAudioDB',     weight: 25, color: SOURCE_META.theaudiodb.color },
   { key: 'rateyourmusic',label: 'MusicBrainz',    weight: 15, color: SOURCE_META.rateyourmusic.color },
   { key: 'critiquebrainz',label:'CritiqueBrainz', weight: 10, color: SOURCE_META.critiquebrainz.color },
-  { key: '_pop',         label: 'Popularidade',   weight: 15, color: '#A238FF' },
+  { key: '_pop',         label: 'Popularity',     weight: 15, color: '#A238FF' },
 ];
 
 // SVG donut ring — r=15.9155 gives circumference≈100, so weight% = dasharray length
@@ -174,7 +174,7 @@ function ScoreRow({
               className="text-xs text-zinc-600 hover:text-[#E8FF3A] transition-colors"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              Ver fonte ↗
+              View source ↗
             </a>
           )}
         </div>
@@ -204,7 +204,7 @@ function ScoreRow({
         {score.review_count > 0 ? (
           <>
             <span className="text-zinc-400">{score.review_count.toLocaleString()}</span>
-            <span className="ml-1">aval.</span>
+            <span className="ml-1">ratings</span>
           </>
         ) : (
           <span className="text-zinc-700">—</span>
@@ -266,7 +266,7 @@ export default async function AlbumPage({
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 mb-8 text-xs text-zinc-600 flex-wrap">
           <Link href="/" className="hover:text-[#E8FF3A] transition-colors">
-            Início
+            Home
           </Link>
           <span>/</span>
           <Link
@@ -306,7 +306,7 @@ export default async function AlbumPage({
               className="text-xs font-bold tracking-widest text-[#E8FF3A] uppercase"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              Álbum
+              Album
             </p>
             <h1
               className="text-4xl sm:text-5xl lg:text-6xl font-normal text-zinc-50 leading-none tracking-tight"
@@ -315,7 +315,7 @@ export default async function AlbumPage({
               {data.title}
             </h1>
             <p className="text-xl text-zinc-400">
-              por{' '}
+              by{' '}
               <Link
                 href={`/artists/${data.artistSlug}`}
                 className="text-zinc-200 hover:text-[#E8FF3A] transition-colors font-medium"
@@ -349,10 +349,10 @@ export default async function AlbumPage({
                 {data.aggregateScore !== null ? Math.round(data.aggregateScore) : '—'}
               </div>
               <div className="pb-2">
-                <p className="text-sm font-medium text-zinc-300">Nota Agregada</p>
+                <p className="text-sm font-medium text-zinc-300">Aggregate Score</p>
                 <p className="text-xs text-zinc-600 max-w-xs mt-0.5">
-                  {allScores.length} fonte{allScores.length !== 1 ? 's' : ''} da crítica
-                  {hasPopularity ? ' + sinais de popularidade' : ''}
+                  {allScores.length} critic source{allScores.length !== 1 ? 's' : ''}
+                  {hasPopularity ? ' + popularity signals' : ''}
                 </p>
               </div>
             </div>
@@ -361,7 +361,7 @@ export default async function AlbumPage({
 
         {/* Score breakdown */}
         <div className="mb-10">
-          <SectionLabel>Detalhamento da Nota</SectionLabel>
+          <SectionLabel>Score Breakdown</SectionLabel>
           {(() => {
             const lfmScore = data.popularity?.lastfm_listeners != null
               ? Math.min(100, Math.round((Math.log10(data.popularity.lastfm_listeners + 1) / 6) * 100 * 10) / 10)
@@ -373,12 +373,12 @@ export default async function AlbumPage({
 
             if (!hasAnyScore) return (
               <div className="border border-dashed border-zinc-800 py-10 text-center text-zinc-600 text-sm">
-                Nenhuma nota coletada ainda.
+                No scores collected yet.
               </div>
             );
 
             const popRows: Array<{ key: string; score: number | null; count: string | null }> = [
-              { key: 'lastfm', score: lfmScore, count: data.popularity?.lastfm_listeners != null ? data.popularity.lastfm_listeners.toLocaleString() + ' ouv.' : null },
+              { key: 'lastfm', score: lfmScore, count: data.popularity?.lastfm_listeners != null ? data.popularity.lastfm_listeners.toLocaleString() + ' listeners' : null },
               { key: 'deezer', score: deezerScore, count: data.popularity?.deezer_fans != null ? Math.round(data.popularity.deezer_fans as number).toString() + '/100' : null },
             ];
 
@@ -388,10 +388,10 @@ export default async function AlbumPage({
                   className="grid grid-cols-[1fr_5rem_7rem_5rem] gap-4 px-5 py-2 text-xs font-bold tracking-widest text-zinc-600 uppercase"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 >
-                  <span>Fonte</span>
-                  <span className="text-right">Nota</span>
-                  <span>Barra</span>
-                  <span className="text-right">Avaliações</span>
+                  <span>Source</span>
+                  <span className="text-right">Score</span>
+                  <span>Bar</span>
+                  <span className="text-right">Ratings</span>
                 </div>
                 {allScores.map((score) => (
                   <ScoreRow
@@ -419,7 +419,7 @@ export default async function AlbumPage({
                             className="text-xs text-zinc-600 hover:text-[#E8FF3A] transition-colors"
                             style={{ fontFamily: 'var(--font-mono)' }}
                           >
-                            Ver fonte ↗
+                            View source ↗
                           </a>
                         </div>
                       </div>
@@ -444,7 +444,7 @@ export default async function AlbumPage({
         {/* Popularity panel */}
         {data.popularity && popContext.totalAlbums > 0 && (
           <div className="mb-10">
-            <SectionLabel>Popularidade na Discografia</SectionLabel>
+            <SectionLabel>Discography Popularity</SectionLabel>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {data.popularity.deezer_fans != null && popContext.maxDeezer != null && (
                 <div className="bg-zinc-900 border border-zinc-800 border-t-2 border-t-[#A238FF] p-5">
@@ -454,7 +454,7 @@ export default async function AlbumPage({
                         <path d="M18.81 4.16v3.03H24V4.16h-5.19zM6.27 8.38v3.027h5.189V8.38H6.27zm6.27 0v3.027h5.19V8.38h-5.19zm6.27 0v3.027H24V8.38h-5.19zM6.27 12.6v3.027h5.189V12.6H6.27zm6.27 0v3.027h5.19V12.6h-5.19zm6.27 0v3.027H24V12.6h-5.19zM0 16.81v3.027h5.19V16.81H0zm6.27 0v3.027h5.189V16.81H6.27zm6.27 0v3.027h5.19V16.81h-5.19zm6.27 0v3.027H24V16.81h-5.19z" />
                       </svg>
                     </div>
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest">Popularidade Deezer</p>
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest">Deezer Popularity</p>
                     {popContext.deezerRank != null && (
                       <span className="ml-auto text-xs font-bold text-zinc-400" style={{ fontFamily: 'var(--font-mono)' }}>
                         #{popContext.deezerRank} of {popContext.totalAlbums}
@@ -473,7 +473,7 @@ export default async function AlbumPage({
                     <span className="text-zinc-700">/100</span>
                     {popContext.deezerRank != null && (
                       <span className="text-zinc-700 ml-2">
-                        · pico na discografia: {Math.round(popContext.maxDeezer!)}
+                        · discography peak: {Math.round(popContext.maxDeezer!)}
                       </span>
                     )}
                   </p>
@@ -488,9 +488,9 @@ export default async function AlbumPage({
                         <path d="M12.09 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10zm.81 15.28h-1.56v-6.4H9.77v-1.4h4.69v1.4h-1.56v6.4zm-3.13-9.06a1.07 1.07 0 1 1 1.07-1.07 1.07 1.07 0 0 1-1.07 1.07z" />
                       </svg>
                     </div>
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest">Visualizações Wikipedia</p>
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest">Wikipedia Views</p>
                     <span className="ml-auto text-xs text-zinc-600" style={{ fontFamily: 'var(--font-mono)' }}>
-                      12 meses
+                      12 months
                     </span>
                   </div>
                   <div className="h-1.5 bg-zinc-800 mb-2">
@@ -504,7 +504,7 @@ export default async function AlbumPage({
                       {data.popularity.wikipedia_views >= 1_000_000
                         ? `${(data.popularity.wikipedia_views / 1_000_000).toFixed(1)}M`
                         : `${(data.popularity.wikipedia_views / 1_000).toFixed(0)}K`}{' '}
-                      visualizações anuais
+                      annual views
                     </p>
                     {data.popularity.wikipedia_article && (
                       <a
@@ -514,7 +514,7 @@ export default async function AlbumPage({
                         className="text-xs text-zinc-600 hover:text-[#E8FF3A] transition-colors shrink-0"
                         style={{ fontFamily: 'var(--font-mono)' }}
                       >
-                        Ver artigo ↗
+                        View article ↗
                       </a>
                     )}
                   </div>
@@ -529,7 +529,7 @@ export default async function AlbumPage({
                         <path d="M10.599 8.823l-.881 2.672s-.881-1.058-2.2-1.058c-1.85 0-1.85 2.496 0 2.496.979 0 1.542-.529 1.542-.529l.881 2.672s-.979.529-2.2.529c-3.392 0-3.392-5.343 0-5.343 1.322 0 2.858.561 2.858.561zm4.313 0c-1.763 0-2.672.881-2.672.881l.529 2.143s.528-.881 1.763-.881c.979 0 1.319.529 1.319 1.058v.176c-3.391.176-4.752 1.495-4.752 3.039 0 1.054.705 2.143 2.143 2.143 1.143 0 1.848-.705 1.848-.705v.529h2.32v-4.993c0-2.672-1.675-3.39-2.498-3.39zm.528 5.519c0 .881-.881 1.236-1.495 1.236-.705 0-.705-.529-.705-.529 0-.881 1.142-1.056 2.2-1.144v.437z" />
                       </svg>
                     </div>
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest">Ouvintes Last.fm</p>
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest">Last.fm Listeners</p>
                     {popContext.listenersRank != null && (
                       <span className="ml-auto text-xs font-bold text-zinc-400" style={{ fontFamily: 'var(--font-mono)' }}>
                         #{popContext.listenersRank} of {popContext.totalAlbums}
@@ -546,9 +546,9 @@ export default async function AlbumPage({
                     {data.popularity.lastfm_listeners >= 1_000_000
                       ? `${(data.popularity.lastfm_listeners / 1_000_000).toFixed(1)}M`
                       : `${(data.popularity.lastfm_listeners / 1_000).toFixed(0)}K`}{' '}
-                    ouvintes
+                    listeners
                     {data.popularity.lastfm_playcount != null &&
-                      ` · ${data.popularity.lastfm_playcount.toLocaleString()} reproduções`}
+                      ` · ${data.popularity.lastfm_playcount.toLocaleString()} plays`}
                   </p>
                 </div>
               )}
@@ -558,7 +558,7 @@ export default async function AlbumPage({
 
         {/* Score Composition — donut ring + contribution table */}
         <div className="mb-10">
-          <SectionLabel>Composição da Nota</SectionLabel>
+          <SectionLabel>Score Composition</SectionLabel>
           <div className="bg-zinc-900 border border-zinc-800">
             <div className="flex flex-col lg:flex-row">
 
@@ -646,10 +646,10 @@ export default async function AlbumPage({
                   className="grid grid-cols-[1fr_3.5rem_3.5rem_5rem] gap-3 px-5 py-3 text-[10px] font-bold tracking-widest text-zinc-600 uppercase border-b border-zinc-800"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 >
-                  <span>Fonte</span>
-                  <span className="text-right">Peso</span>
-                  <span className="text-right">Nota</span>
-                  <span className="text-right">Contribuição</span>
+                  <span>Source</span>
+                  <span className="text-right">Weight</span>
+                  <span className="text-right">Score</span>
+                  <span className="text-right">Contribution</span>
                 </div>
 
                 {/* Rows */}
@@ -716,10 +716,10 @@ export default async function AlbumPage({
                 {/* Total row */}
                 <div className="mt-auto border-t border-zinc-700 px-5 py-4 grid grid-cols-[1fr_3.5rem_3.5rem_5rem] gap-3 items-center bg-zinc-800/30">
                   <div className="text-xs text-zinc-500" style={{ fontFamily: 'var(--font-mono)' }}>
-                    Peso ativo:{' '}
+                    Active weight:{' '}
                     <span className="text-zinc-400 font-bold">{activeWeight}%</span>
                     {activeWeight < 100 && (
-                      <span className="text-zinc-600 ml-1">(fontes ausentes ignoradas)</span>
+                      <span className="text-zinc-600 ml-1">(missing sources excluded)</span>
                     )}
                   </div>
                   <span />
@@ -747,7 +747,7 @@ export default async function AlbumPage({
         {/* Tracklist */}
         {data.tracklist.length > 0 && (
           <div>
-            <SectionLabel>Faixas</SectionLabel>
+            <SectionLabel>Tracks</SectionLabel>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-zinc-800">
               {data.tracklist.map((track, i) => (
                 <div

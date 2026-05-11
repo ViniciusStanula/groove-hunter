@@ -72,7 +72,7 @@ export function AlbumCard({
         <Link
           href={`/albums/${album.artistSlug}/${album.slug}`}
           className="absolute inset-0 z-0"
-          aria-label={`${album.title} por ${album.artistName}`}
+          aria-label={`${album.title} by ${album.artistName}`}
         />
 
         {/* Cover — fixed width column */}
@@ -106,7 +106,7 @@ export function AlbumCard({
               {rankStr}
             </span>
             <span className="text-xs text-zinc-600" style={{ fontFamily: 'var(--font-mono)' }}>
-              {sourceCount} fonte{sourceCount !== 1 ? 's' : ''}
+              {sourceCount} source{sourceCount !== 1 ? 's' : ''}
             </span>
           </div>
 
@@ -184,7 +184,7 @@ export function AlbumCard({
         <Link
           href={`/albums/${album.artistSlug}/${album.slug}`}
           className="absolute inset-0 z-0"
-          aria-label={`${album.title} por ${album.artistName}`}
+          aria-label={`${album.title} by ${album.artistName}`}
         />
 
         <div
