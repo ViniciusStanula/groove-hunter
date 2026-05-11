@@ -41,7 +41,6 @@ async function updateState(next_page: number, total_crawled: number): Promise<vo
 interface LastfmArtist {
   name: string;
   listeners: string;
-  '@attr': { rank: string };
 }
 
 async function fetchTopArtists(page: number): Promise<Array<{ name: string; listeners: number; rank: number }>> {
@@ -53,10 +52,11 @@ async function fetchTopArtists(page: number): Promise<Array<{ name: string; list
   if (!res.ok) throw new Error(`Last.fm API error: ${res.status} ${res.statusText}`);
 
   const data = await res.json() as { artists: { artist: LastfmArtist[] } };
-  return data.artists.artist.map((a) => ({
+  const offset = (page - 1) * BATCH_SIZE;
+  return data.artists.artist.map((a, i) => ({
     name: a.name,
     listeners: parseInt(a.listeners, 10),
-    rank: parseInt(a['@attr'].rank, 10),
+    rank: offset + i + 1,
   }));
 }
 
