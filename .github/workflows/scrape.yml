@@ -1,14 +1,23 @@
 name: Scrape Music Scores
 
 on:
-  schedule:
-    - cron: '0 4 * * 0'  # Every Sunday at 4am UTC — runs after Last.fm crawler finishes
   workflow_dispatch:
+    inputs:
+      rank_start:
+        description: 'Rank start (first artist rank to scrape)'
+        default: '1'
+      rank_end:
+        description: 'Rank end (last artist rank to scrape)'
+        default: '100'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6h — scraping 30 artists takes time
+    timeout-minutes: 360  # 6h max
+
+    permissions:
+      actions: write
+      contents: read
 
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -18,7 +27,8 @@ jobs:
       DISCOGS_SECRET: ${{ secrets.DISCOGS_SECRET }}
       SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
       SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
-      TOP_N: '30'
+      RANK_START: ${{ inputs.rank_start }}
+      RANK_END: ${{ inputs.rank_end }}
 
     steps:
       - uses: actions/checkout@v4
@@ -36,3 +46,14 @@ jobs:
 
       - name: Scrape albums and scores
         run: npx tsx --tsconfig tsconfig.json scripts/scrape-albums.ts
+
+      - name: Trigger next Last.fm crawler batch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/ViniciusStanula/groove-hunter/actions/workflows/crawl-lastfm.yml/dispatches \
+            -d '{"ref":"main"}'
+          echo "Triggered next Last.fm crawler batch."

@@ -2,10 +2,8 @@ name: Last.fm Artist Crawler
 
 on:
   schedule:
-    - cron: '0 1 * * 0'  # Every Sunday at 1am UTC — starts a fresh crawl cycle
+    - cron: '0 1 * * 0'  # Every Sunday at 1am UTC — kicks off a fresh cycle
   workflow_dispatch:
-  repository_dispatch:
-    types: [crawl-next-batch]
 
 jobs:
   crawl:
@@ -28,19 +26,20 @@ jobs:
         run: npm ci
 
       - name: Run crawler batch
+        id: crawl
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
         run: npx tsx scripts/crawl-lastfm.ts
 
-      - name: Trigger next batch
+      - name: Trigger score scraper for this batch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl -s -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/ViniciusStanula/groove-hunter/actions/workflows/crawl-lastfm.yml/dispatches \
-            -d '{"ref":"main"}'
-          echo "Next batch triggered."
+            https://api.github.com/repos/ViniciusStanula/groove-hunter/actions/workflows/scrape.yml/dispatches \
+            -d "{\"ref\":\"main\",\"inputs\":{\"rank_start\":\"${{ steps.crawl.outputs.rank_start }}\",\"rank_end\":\"${{ steps.crawl.outputs.rank_end }}\"}}"
+          echo "Triggered scraper for ranks ${{ steps.crawl.outputs.rank_start }}–${{ steps.crawl.outputs.rank_end }}"

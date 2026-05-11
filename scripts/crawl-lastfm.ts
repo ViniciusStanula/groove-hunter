@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { appendFileSync } from 'fs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -104,6 +105,12 @@ async function main() {
     console.log('Reached page 100 (10,000 artists). Resetting to page 1 for refresh cycle.');
   } else {
     console.log(`State updated: next_page=${new_page}, total_crawled=${new_total}`);
+  }
+
+  // Write rank range to GitHub Actions output so next workflow knows which artists to scrape
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `rank_start=${rangeStart}\n`);
+    appendFileSync(process.env.GITHUB_OUTPUT, `rank_end=${rangeEnd}\n`);
   }
 }
 
