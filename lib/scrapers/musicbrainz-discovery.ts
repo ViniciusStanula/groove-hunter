@@ -4,12 +4,12 @@ const USER_AGENT = 'MusicAggregatorBot/1.0 (https://example.com/bot)';
 
 let lastMbCall = 0;
 async function mbRateLimit(): Promise<void> {
-  const wait = 1100 - (Date.now() - lastMbCall);
+  const wait = 1200 - (Date.now() - lastMbCall);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastMbCall = Date.now();
 }
 
-async function mbGet<T>(path: string): Promise<T | null> {
+async function mbGet<T>(path: string, attempt = 0): Promise<T | null> {
   await mbRateLimit();
   try {
     const controller = new AbortController();
@@ -19,9 +19,26 @@ async function mbGet<T>(path: string): Promise<T | null> {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     });
     clearTimeout(t);
-    if (!res.ok) return null;
+
+    if (res.status === 429 || res.status === 503) {
+      const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0', 10);
+      const backoff = Math.max(retryAfter * 1000, (attempt + 1) * 5_000);
+      console.warn(`[mb] HTTP ${res.status} on ${path} — waiting ${backoff}ms (attempt ${attempt + 1})`);
+      if (attempt < 4) {
+        await new Promise((r) => setTimeout(r, backoff));
+        return mbGet<T>(path, attempt + 1);
+      }
+      return null;
+    }
+
+    if (!res.ok) {
+      console.warn(`[mb] HTTP ${res.status} on ${path}`);
+      return null;
+    }
+
     return (await res.json()) as T;
-  } catch {
+  } catch (err) {
+    console.warn(`[mb] Fetch error on ${path}:`, err instanceof Error ? err.message : err);
     return null;
   }
 }
