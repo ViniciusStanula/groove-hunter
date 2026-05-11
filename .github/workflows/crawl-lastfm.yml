@@ -1,7 +1,9 @@
 name: Last.fm Artist Crawler
 
 on:
-  workflow_dispatch:      # Manual trigger or API trigger
+  schedule:
+    - cron: '0 1 * * 0'  # Every Sunday at 1am UTC — starts a fresh crawl cycle
+  workflow_dispatch:
   repository_dispatch:
     types: [crawl-next-batch]
 
