@@ -53,10 +53,9 @@ export async function refreshArtist(artistName: string): Promise<void> {
   console.log(`[refresh] Starting refresh for: ${artistName} (${artistSlug})`);
 
   try {
-    // Discover canonical albums via MusicBrainz release groups
     const mbid = await getArtistMbid(artistName);
     if (!mbid) {
-      logRefresh(artistSlug, 'warning', 'Artist not found on MusicBrainz');
+      await logRefresh(artistSlug, 'warning', 'Artist not found on MusicBrainz');
       console.warn(`[refresh] Artist not found on MusicBrainz: ${artistName}`);
       return;
     }
@@ -67,19 +66,17 @@ export async function refreshArtist(artistName: string): Promise<void> {
       getArtistGenres(mbid),
     ]);
     if (!releaseGroups.length) {
-      logRefresh(artistSlug, 'warning', 'No albums found on MusicBrainz');
+      await logRefresh(artistSlug, 'warning', 'No albums found on MusicBrainz');
       console.warn(`[refresh] No albums found for ${artistName}`);
       return;
     }
 
-    // Limit to 20 most recent studio albums
     const topAlbums = releaseGroups.slice(-20).reverse();
     console.log(`[refresh] Found ${releaseGroups.length} studio albums, processing ${topAlbums.length}`);
 
-    // Fetch artist bio + image from Last.fm (one-time, not per album)
     const { bio, imageUrl: artistImageUrl } = await getArtistLastfmInfo(artistName);
 
-    const artist = upsertArtist(artistName, artistSlug, artistImageUrl, bio, artistGenres);
+    const artist = await upsertArtist(artistName, artistSlug, artistImageUrl, bio, artistGenres);
 
     for (const rg of topAlbums) {
       try {
@@ -87,8 +84,6 @@ export async function refreshArtist(artistName: string): Promise<void> {
 
         const albumSlug = albumToSlug(rg.title);
 
-        // Cover art, tracklist, and all edition titles (for aggregated Last.fm stats)
-        // Last.fm is primary image source (fast CDN, no redirect chain); CAA is fallback
         const [lfmDetail, caaUrl, tracklist, allTitles] = await Promise.all([
           fetchAlbumInfo(artistName, rg.title),
           getCoverArtUrl(rg.id),
@@ -98,7 +93,7 @@ export async function refreshArtist(artistName: string): Promise<void> {
 
         const coverUrl = lfmDetail?.image || caaUrl || null;
 
-        const album = upsertAlbum(
+        const album = await upsertAlbum(
           artist.id,
           rg.title,
           albumSlug,
@@ -108,7 +103,6 @@ export async function refreshArtist(artistName: string): Promise<void> {
           rg.genres.length ? rg.genres : artistGenres,
         );
 
-        // Critic scores
         const [tadbResult, discogsResult, cbResult, rymResult] = await Promise.allSettled([
           getTheAudioDBScore(artistName, rg.title),
           getDiscogsScore(artistName, rg.title),
@@ -117,23 +111,21 @@ export async function refreshArtist(artistName: string): Promise<void> {
         ]);
 
         if (tadbResult.status === 'fulfilled' && tadbResult.value)
-          upsertScore(album.id, 'theaudiodb', tadbResult.value.score, 100, tadbResult.value.reviewCount, tadbResult.value.url);
+          await upsertScore(album.id, 'theaudiodb', tadbResult.value.score, 100, tadbResult.value.reviewCount, tadbResult.value.url);
         if (discogsResult.status === 'fulfilled' && discogsResult.value)
-          upsertScore(album.id, 'discogs', discogsResult.value.score, 100, discogsResult.value.reviewCount, discogsResult.value.url);
+          await upsertScore(album.id, 'discogs', discogsResult.value.score, 100, discogsResult.value.reviewCount, discogsResult.value.url);
         if (cbResult.status === 'fulfilled' && cbResult.value)
-          upsertScore(album.id, 'critiquebrainz', cbResult.value.score, 100, cbResult.value.reviewCount, cbResult.value.url);
+          await upsertScore(album.id, 'critiquebrainz', cbResult.value.score, 100, cbResult.value.reviewCount, cbResult.value.url);
         if (rymResult.status === 'fulfilled' && rymResult.value)
-          upsertScore(album.id, 'rateyourmusic', rymResult.value.score, 100, rymResult.value.reviewCount, rymResult.value.url);
+          await upsertScore(album.id, 'rateyourmusic', rymResult.value.score, 100, rymResult.value.reviewCount, rymResult.value.url);
 
-        // Popularity signals
-        // Last.fm sums listeners across all editions (remastered, deluxe, etc.)
         const titlesToQuery = allTitles.length ? allTitles : [rg.title];
         const [spotifyResult, lfmPop, wikiViews] = await Promise.all([
           getSpotifyPopularity(artistName, rg.title),
           getLastfmPopularity(artistName, titlesToQuery, process.env.LASTFM_API_KEY ?? ''),
           getWikipediaPageviews(artistName, rg.title),
         ]);
-        upsertPopularity(
+        await upsertPopularity(
           album.id,
           spotifyResult?.score ?? null,
           lfmPop?.listeners ?? null,
@@ -148,11 +140,11 @@ export async function refreshArtist(artistName: string): Promise<void> {
       }
     }
 
-    logRefresh(artistSlug, 'success', `Refreshed ${topAlbums.length} albums for ${artistName}`);
+    await logRefresh(artistSlug, 'success', `Refreshed ${topAlbums.length} albums for ${artistName}`);
     console.log(`[refresh] Completed refresh for: ${artistName}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logRefresh(artistSlug, 'error', message);
+    await logRefresh(artistSlug, 'error', message);
     console.error(`[refresh] Failed for ${artistName}:`, err);
     throw err;
   }

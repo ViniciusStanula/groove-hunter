@@ -1,110 +1,6 @@
-import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
+import { supabase } from '@/lib/supabase';
 
-// Ensure data directory exists
-const DATA_DIR = path.join(process.cwd(), 'data');
-fs.mkdirSync(DATA_DIR, { recursive: true });
-
-const DB_PATH = path.join(DATA_DIR, 'cache.db');
-
-let _db: Database.Database | null = null;
-
-function getDb(): Database.Database {
-  if (_db) return _db;
-  _db = new Database(DB_PATH);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
-  initSchema(_db);
-  return _db;
-}
-
-function initSchema(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS artists (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      slug TEXT NOT NULL UNIQUE,
-      image_url TEXT,
-      bio TEXT,
-      created_at INTEGER DEFAULT (unixepoch()),
-      updated_at INTEGER DEFAULT (unixepoch())
-    );
-
-    CREATE TABLE IF NOT EXISTS albums (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      artist_id INTEGER NOT NULL REFERENCES artists(id),
-      title TEXT NOT NULL,
-      slug TEXT NOT NULL,
-      release_date TEXT,
-      cover_url TEXT,
-      tracklist TEXT DEFAULT '[]',
-      created_at INTEGER DEFAULT (unixepoch()),
-      updated_at INTEGER DEFAULT (unixepoch()),
-      UNIQUE(artist_id, slug)
-    );
-
-    CREATE TABLE IF NOT EXISTS scores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      album_id INTEGER NOT NULL REFERENCES albums(id),
-      source TEXT NOT NULL,
-      score REAL,
-      max_score REAL DEFAULT 100,
-      review_count INTEGER DEFAULT 0,
-      source_url TEXT,
-      scraped_at INTEGER DEFAULT (unixepoch()),
-      UNIQUE(album_id, source)
-    );
-
-    CREATE TABLE IF NOT EXISTS popularity (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      album_id INTEGER NOT NULL REFERENCES albums(id),
-      deezer_fans INTEGER,
-      lastfm_listeners INTEGER,
-      lastfm_playcount INTEGER,
-      wikipedia_views INTEGER,
-      scraped_at INTEGER DEFAULT (unixepoch()),
-      UNIQUE(album_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS refresh_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      artist_slug TEXT NOT NULL,
-      status TEXT NOT NULL,
-      message TEXT,
-      ran_at INTEGER DEFAULT (unixepoch())
-    );
-  `);
-
-  // Migrations — safe to run repeatedly
-  const artistCols = (db.prepare(`PRAGMA table_info(artists)`).all() as { name: string }[]).map((c) => c.name);
-  if (!artistCols.includes('genres')) {
-    db.exec(`ALTER TABLE artists ADD COLUMN genres TEXT DEFAULT '[]'`);
-  }
-
-  const albumCols2 = (db.prepare(`PRAGMA table_info(albums)`).all() as { name: string }[]).map((c) => c.name);
-  if (!albumCols2.includes('genres')) {
-    db.exec(`ALTER TABLE albums ADD COLUMN genres TEXT DEFAULT '[]'`);
-  }
-
-  const scoreCols = (db.prepare(`PRAGMA table_info(scores)`).all() as { name: string }[]).map((c) => c.name);
-  if (!scoreCols.includes('source_url')) {
-    db.exec(`ALTER TABLE scores ADD COLUMN source_url TEXT`);
-  }
-
-  const popCols = (db.prepare(`PRAGMA table_info(popularity)`).all() as { name: string }[]).map((c) => c.name);
-  if (popCols.includes('spotify_popularity') && !popCols.includes('deezer_fans')) {
-    db.exec(`ALTER TABLE popularity RENAME COLUMN spotify_popularity TO deezer_fans`);
-  }
-  if (!popCols.includes('wikipedia_views')) {
-    db.exec(`ALTER TABLE popularity ADD COLUMN wikipedia_views INTEGER`);
-  }
-  if (!popCols.includes('wikipedia_article')) {
-    db.exec(`ALTER TABLE popularity ADD COLUMN wikipedia_article TEXT`);
-  }
-}
-
-// ─── Interfaces ──────────────────────────────────────────────────────────────
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface Artist {
   id: number;
@@ -113,8 +9,8 @@ export interface Artist {
   image_url: string | null;
   bio: string | null;
   genres: string[];
-  created_at: number;
-  updated_at: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Album {
@@ -126,8 +22,8 @@ export interface Album {
   cover_url: string | null;
   tracklist: string[];
   genres: string[];
-  created_at: number;
-  updated_at: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Score {
@@ -138,15 +34,7 @@ export interface Score {
   max_score: number;
   review_count: number;
   source_url: string | null;
-  scraped_at: number;
-}
-
-export interface AlbumWithScores extends Album {
-  artistName: string;
-  artistSlug: string;
-  scores: Score[];
-  aggregateScore: number | null;
-  popularity: PopularityData | null;
+  scraped_at: string;
 }
 
 export interface PopularityData {
@@ -157,7 +45,23 @@ export interface PopularityData {
   lastfm_playcount: number | null;
   wikipedia_views: number | null;
   wikipedia_article: string | null;
-  scraped_at: number;
+  scraped_at: string;
+}
+
+export interface AlbumWithScores extends Album {
+  artistName: string;
+  artistSlug: string;
+  scores: Score[];
+  aggregateScore: number | null;
+  popularity: PopularityData | null;
+}
+
+export interface ArtistPopularityContext {
+  maxDeezer: number | null;
+  maxListeners: number | null;
+  totalAlbums: number;
+  deezerRank: number | null;
+  listenersRank: number | null;
 }
 
 // ─── Score weights ────────────────────────────────────────────────────────────
@@ -205,59 +109,40 @@ function computeAggregateScore(scores: Score[], popularity: PopularityData | nul
   return Math.round((weightedSum / totalWeight) * 10) / 10;
 }
 
-// ─── Raw DB row types ─────────────────────────────────────────────────────────
+// ─── Internal types ───────────────────────────────────────────────────────────
 
-interface AlbumRow {
+interface AlbumRowWithArtist {
   id: number;
   artist_id: number;
   title: string;
   slug: string;
   release_date: string | null;
   cover_url: string | null;
-  tracklist: string;
-  genres: string;
-  created_at: number;
-  updated_at: number;
-}
-
-interface AlbumWithArtistRow extends AlbumRow {
-  artist_name: string;
-  artist_slug: string;
-}
-
-interface ScoreRow {
-  id: number;
-  album_id: number;
-  source: string;
-  score: number | null;
-  max_score: number;
-  review_count: number;
-  source_url: string | null;
-  scraped_at: number;
-}
-
-function parseJson<T>(s: string | null | undefined, fallback: T): T {
-  try { return JSON.parse(s || '') as T; } catch { return fallback; }
-}
-
-function parseAlbumRow(row: AlbumRow): Album {
-  return {
-    ...row,
-    tracklist: parseJson<string[]>(row.tracklist, []),
-    genres: parseJson<string[]>(row.genres, []),
-  };
+  tracklist: string[];
+  genres: string[];
+  created_at: string;
+  updated_at: string;
+  artists: { name: string; slug: string } | null;
 }
 
 function buildAlbumWithScores(
-  row: AlbumWithArtistRow,
+  row: AlbumRowWithArtist,
   scores: Score[],
-  popularity: PopularityData | null
+  popularity: PopularityData | null,
 ): AlbumWithScores {
-  const album = parseAlbumRow(row);
   return {
-    ...album,
-    artistName: row.artist_name,
-    artistSlug: row.artist_slug,
+    id: row.id,
+    artist_id: row.artist_id,
+    title: row.title,
+    slug: row.slug,
+    release_date: row.release_date,
+    cover_url: row.cover_url,
+    tracklist: row.tracklist ?? [],
+    genres: row.genres ?? [],
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    artistName: row.artists?.name ?? '',
+    artistSlug: row.artists?.slug ?? '',
     scores,
     aggregateScore: computeAggregateScore(scores, popularity),
     popularity,
@@ -266,210 +151,211 @@ function buildAlbumWithScores(
 
 // ─── Exported functions ───────────────────────────────────────────────────────
 
-function parseArtistRow(row: Artist & { genres: string }): Artist {
-  return { ...row, genres: parseJson<string[]>((row as unknown as { genres: string }).genres, []) };
-}
-
-export function upsertArtist(
+export async function upsertArtist(
   name: string,
   slug: string,
   imageUrl?: string,
   bio?: string,
-  genres?: string[]
-): Artist {
-  const db = getDb();
-  const genresJson = JSON.stringify(genres ?? []);
-  db.prepare(`
-    INSERT INTO artists (name, slug, image_url, bio, genres, updated_at)
-    VALUES (?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(slug) DO UPDATE SET
-      name = excluded.name,
-      image_url = COALESCE(excluded.image_url, image_url),
-      bio = COALESCE(excluded.bio, bio),
-      genres = CASE WHEN excluded.genres = '[]' THEN genres ELSE excluded.genres END,
-      updated_at = unixepoch()
-  `).run(name, slug, imageUrl ?? null, bio ?? null, genresJson);
+  genres?: string[],
+): Promise<Artist> {
+  const row: Record<string, unknown> = { name, slug, updated_at: new Date().toISOString() };
+  if (imageUrl != null) row.image_url = imageUrl;
+  if (bio != null) row.bio = bio;
+  if (genres?.length) row.genres = genres;
 
-  return parseArtistRow(db.prepare('SELECT * FROM artists WHERE slug = ?').get(slug) as Artist & { genres: string });
+  const { data, error } = await supabase
+    .from('artists')
+    .upsert(row, { onConflict: 'slug' })
+    .select()
+    .single();
+
+  if (error) throw new Error(`upsertArtist failed: ${error.message}`);
+  return data as Artist;
 }
 
-export function upsertAlbum(
+export async function upsertAlbum(
   artistId: number,
   title: string,
   slug: string,
   releaseDate?: string,
   coverUrl?: string,
   tracklist?: string[],
-  genres?: string[]
-): Album {
-  const db = getDb();
-  const tracklistJson = JSON.stringify(tracklist ?? []);
-  const genresJson = JSON.stringify(genres ?? []);
+  genres?: string[],
+): Promise<Album> {
+  const row: Record<string, unknown> = {
+    artist_id: artistId,
+    title,
+    slug,
+    updated_at: new Date().toISOString(),
+  };
+  if (releaseDate != null) row.release_date = releaseDate;
+  if (coverUrl != null) row.cover_url = coverUrl;
+  if (tracklist?.length) row.tracklist = tracklist;
+  if (genres?.length) row.genres = genres;
 
-  db.prepare(`
-    INSERT INTO albums (artist_id, title, slug, release_date, cover_url, tracklist, genres, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(artist_id, slug) DO UPDATE SET
-      title = excluded.title,
-      release_date = COALESCE(excluded.release_date, release_date),
-      cover_url = COALESCE(excluded.cover_url, cover_url),
-      tracklist = CASE WHEN excluded.tracklist = '[]' THEN tracklist ELSE excluded.tracklist END,
-      genres = CASE WHEN excluded.genres = '[]' THEN genres ELSE excluded.genres END,
-      updated_at = unixepoch()
-  `).run(artistId, title, slug, releaseDate ?? null, coverUrl ?? null, tracklistJson, genresJson);
+  const { data, error } = await supabase
+    .from('albums')
+    .upsert(row, { onConflict: 'artist_id,slug' })
+    .select()
+    .single();
 
-  const row = db
-    .prepare('SELECT * FROM albums WHERE artist_id = ? AND slug = ?')
-    .get(artistId, slug) as AlbumRow;
-
-  return parseAlbumRow(row);
+  if (error) throw new Error(`upsertAlbum failed: ${error.message}`);
+  return data as Album;
 }
 
-export function upsertScore(
+export async function upsertScore(
   albumId: number,
   source: string,
   score: number,
   maxScore: number,
   reviewCount: number,
-  sourceUrl?: string
-): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO scores (album_id, source, score, max_score, review_count, source_url, scraped_at)
-    VALUES (?, ?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(album_id, source) DO UPDATE SET
-      score = excluded.score,
-      max_score = excluded.max_score,
-      review_count = excluded.review_count,
-      source_url = COALESCE(excluded.source_url, source_url),
-      scraped_at = unixepoch()
-  `).run(albumId, source, score, maxScore, reviewCount, sourceUrl ?? null);
-}
-
-export function getArtistBySlug(slug: string): Artist | undefined {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM artists WHERE slug = ?').get(slug) as (Artist & { genres: string }) | undefined;
-  if (!row) return undefined;
-  return parseArtistRow(row);
-}
-
-export interface ArtistPopularityContext {
-  maxDeezer: number | null;
-  maxListeners: number | null;
-  totalAlbums: number;
-  deezerRank: number | null;
-  listenersRank: number | null;
-}
-
-export function getArtistPopularityContext(
-  artistId: number,
-  albumId: number
-): ArtistPopularityContext {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT p.album_id, p.deezer_fans, p.lastfm_listeners
-    FROM popularity p
-    JOIN albums a ON a.id = p.album_id
-    WHERE a.artist_id = ?
-  `).all(artistId) as { album_id: number; deezer_fans: number | null; lastfm_listeners: number | null }[];
-
-  if (!rows.length) return { maxDeezer: null, maxListeners: null, totalAlbums: 0, deezerRank: null, listenersRank: null };
-
-  const deezerVals = rows.filter((r) => r.deezer_fans != null).sort((a, b) => (b.deezer_fans ?? 0) - (a.deezer_fans ?? 0));
-  const listenersVals = rows.filter((r) => r.lastfm_listeners != null).sort((a, b) => (b.lastfm_listeners ?? 0) - (a.lastfm_listeners ?? 0));
-
-  const deezerRank = deezerVals.findIndex((r) => r.album_id === albumId);
-  const listenersRank = listenersVals.findIndex((r) => r.album_id === albumId);
-
-  return {
-    maxDeezer: deezerVals[0]?.deezer_fans ?? null,
-    maxListeners: listenersVals[0]?.lastfm_listeners ?? null,
-    totalAlbums: rows.length,
-    deezerRank: deezerRank >= 0 ? deezerRank + 1 : null,
-    listenersRank: listenersRank >= 0 ? listenersRank + 1 : null,
+  sourceUrl?: string,
+): Promise<void> {
+  const row: Record<string, unknown> = {
+    album_id: albumId,
+    source,
+    score,
+    max_score: maxScore,
+    review_count: reviewCount,
+    scraped_at: new Date().toISOString(),
   };
+  if (sourceUrl != null) row.source_url = sourceUrl;
+
+  const { error } = await supabase
+    .from('scores')
+    .upsert(row, { onConflict: 'album_id,source' });
+
+  if (error) throw new Error(`upsertScore failed: ${error.message}`);
 }
 
-function getPopularity(albumId: number): PopularityData | null {
-  const db = getDb();
-  return (db.prepare('SELECT * FROM popularity WHERE album_id = ?').get(albumId) as PopularityData | undefined) ?? null;
-}
-
-export function upsertPopularity(
+export async function upsertPopularity(
   albumId: number,
   deezerFans: number | null,
   lastfmListeners: number | null,
   lastfmPlaycount: number | null,
   wikipediaViews: number | null = null,
-  wikipediaArticle: string | null = null
-): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO popularity (album_id, deezer_fans, lastfm_listeners, lastfm_playcount, wikipedia_views, wikipedia_article, scraped_at)
-    VALUES (?, ?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(album_id) DO UPDATE SET
-      deezer_fans = COALESCE(excluded.deezer_fans, deezer_fans),
-      lastfm_listeners = COALESCE(excluded.lastfm_listeners, lastfm_listeners),
-      lastfm_playcount = COALESCE(excluded.lastfm_playcount, lastfm_playcount),
-      wikipedia_views = COALESCE(excluded.wikipedia_views, wikipedia_views),
-      wikipedia_article = COALESCE(excluded.wikipedia_article, wikipedia_article),
-      scraped_at = unixepoch()
-  `).run(albumId, deezerFans, lastfmListeners, lastfmPlaycount, wikipediaViews, wikipediaArticle);
+  wikipediaArticle: string | null = null,
+): Promise<void> {
+  const row: Record<string, unknown> = {
+    album_id: albumId,
+    scraped_at: new Date().toISOString(),
+  };
+  if (deezerFans != null) row.deezer_fans = deezerFans;
+  if (lastfmListeners != null) row.lastfm_listeners = lastfmListeners;
+  if (lastfmPlaycount != null) row.lastfm_playcount = lastfmPlaycount;
+  if (wikipediaViews != null) row.wikipedia_views = wikipediaViews;
+  if (wikipediaArticle != null) row.wikipedia_article = wikipediaArticle;
+
+  const { error } = await supabase
+    .from('popularity')
+    .upsert(row, { onConflict: 'album_id' });
+
+  if (error) throw new Error(`upsertPopularity failed: ${error.message}`);
 }
 
-export function getAlbumsByArtist(artistId: number): AlbumWithScores[] {
-  const db = getDb();
-  const albumRows = db
-    .prepare(`
-      SELECT al.*, ar.name as artist_name, ar.slug as artist_slug
-      FROM albums al
-      JOIN artists ar ON ar.id = al.artist_id
-      WHERE al.artist_id = ?
-      ORDER BY al.release_date DESC
-    `)
-    .all(artistId) as AlbumWithArtistRow[];
-
-  return albumRows.map((row) => {
-    const scores = db.prepare('SELECT * FROM scores WHERE album_id = ?').all(row.id) as ScoreRow[];
-    return buildAlbumWithScores(row, scores, getPopularity(row.id));
+export async function logRefresh(
+  artistSlug: string,
+  status: string,
+  message?: string,
+): Promise<void> {
+  await supabase.from('refresh_log').insert({
+    artist_slug: artistSlug,
+    status,
+    message: message ?? null,
   });
 }
 
-export function getAlbumWithScores(
-  artistSlug: string,
-  albumSlug: string
-): AlbumWithScores | undefined {
-  const db = getDb();
-  const row = db
-    .prepare(`
-      SELECT al.*, ar.name as artist_name, ar.slug as artist_slug
-      FROM albums al
-      JOIN artists ar ON ar.id = al.artist_id
-      WHERE ar.slug = ? AND al.slug = ?
-    `)
-    .get(artistSlug, albumSlug) as AlbumWithArtistRow | undefined;
+export async function getArtistBySlug(slug: string): Promise<Artist | undefined> {
+  const { data } = await supabase
+    .from('artists')
+    .select('*')
+    .eq('slug', slug)
+    .single();
 
-  if (!row) return undefined;
-
-  const scores = db.prepare('SELECT * FROM scores WHERE album_id = ?').all(row.id) as ScoreRow[];
-  return buildAlbumWithScores(row, scores, getPopularity(row.id));
+  return (data as Artist | null) ?? undefined;
 }
 
-export function getTopAlbums(limit: number): AlbumWithScores[] {
-  const db = getDb();
-  const albumRows = db
-    .prepare(`
-      SELECT al.*, ar.name as artist_name, ar.slug as artist_slug
-      FROM albums al
-      JOIN artists ar ON ar.id = al.artist_id
-      ORDER BY al.created_at DESC
-      LIMIT ?
-    `)
-    .all(limit) as AlbumWithArtistRow[];
+export async function getAlbumsByArtist(artistId: number): Promise<AlbumWithScores[]> {
+  const { data: albumRows, error } = await supabase
+    .from('albums')
+    .select('*, artists!inner(name, slug)')
+    .eq('artist_id', artistId)
+    .order('release_date', { ascending: false });
 
-  const results: AlbumWithScores[] = albumRows.map((row) => {
-    const scores = db.prepare('SELECT * FROM scores WHERE album_id = ?').all(row.id) as ScoreRow[];
-    return buildAlbumWithScores(row, scores, getPopularity(row.id));
+  if (error || !albumRows?.length) return [];
+
+  const albumIds = albumRows.map((r) => r.id as number);
+
+  const [{ data: scores }, { data: popularity }] = await Promise.all([
+    supabase.from('scores').select('*').in('album_id', albumIds),
+    supabase.from('popularity').select('*').in('album_id', albumIds),
+  ]);
+
+  return (albumRows as AlbumRowWithArtist[]).map((row) => {
+    const albumScores = ((scores ?? []) as Score[]).filter((s) => s.album_id === row.id);
+    const albumPop = ((popularity ?? []) as PopularityData[]).find((p) => p.album_id === row.id) ?? null;
+    return buildAlbumWithScores(row, albumScores, albumPop);
+  });
+}
+
+export async function getAlbumWithScores(
+  artistSlug: string,
+  albumSlug: string,
+): Promise<AlbumWithScores | undefined> {
+  const { data: artist } = await supabase
+    .from('artists')
+    .select('id, name, slug')
+    .eq('slug', artistSlug)
+    .single();
+
+  if (!artist) return undefined;
+
+  const { data: albumRow } = await supabase
+    .from('albums')
+    .select('*')
+    .eq('artist_id', artist.id)
+    .eq('slug', albumSlug)
+    .single();
+
+  if (!albumRow) return undefined;
+
+  const [{ data: scores }, { data: popularity }] = await Promise.all([
+    supabase.from('scores').select('*').eq('album_id', albumRow.id),
+    supabase.from('popularity').select('*').eq('album_id', albumRow.id).maybeSingle(),
+  ]);
+
+  const row: AlbumRowWithArtist = {
+    ...(albumRow as Album),
+    artists: { name: artist.name as string, slug: artist.slug as string },
+  };
+
+  return buildAlbumWithScores(
+    row,
+    (scores ?? []) as Score[],
+    (popularity as PopularityData | null) ?? null,
+  );
+}
+
+export async function getTopAlbums(limit: number): Promise<AlbumWithScores[]> {
+  const { data: albumRows, error } = await supabase
+    .from('albums')
+    .select('*, artists!inner(name, slug)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !albumRows?.length) return [];
+
+  const albumIds = albumRows.map((r) => r.id as number);
+
+  const [{ data: scores }, { data: popularity }] = await Promise.all([
+    supabase.from('scores').select('*').in('album_id', albumIds),
+    supabase.from('popularity').select('*').in('album_id', albumIds),
+  ]);
+
+  const results = (albumRows as AlbumRowWithArtist[]).map((row) => {
+    const albumScores = ((scores ?? []) as Score[]).filter((s) => s.album_id === row.id);
+    const albumPop = ((popularity ?? []) as PopularityData[]).find((p) => p.album_id === row.id) ?? null;
+    return buildAlbumWithScores(row, albumScores, albumPop);
   });
 
   return results.sort((a, b) => {
@@ -480,66 +366,113 @@ export function getTopAlbums(limit: number): AlbumWithScores[] {
   });
 }
 
-export function clearArtistAlbums(artistId: number): void {
-  const db = getDb();
-  const albumIds = (db.prepare('SELECT id FROM albums WHERE artist_id = ?').all(artistId) as { id: number }[]).map((r) => r.id);
-  if (!albumIds.length) return;
-  const placeholders = albumIds.map(() => '?').join(',');
-  db.prepare(`DELETE FROM scores WHERE album_id IN (${placeholders})`).run(...albumIds);
-  db.prepare(`DELETE FROM popularity WHERE album_id IN (${placeholders})`).run(...albumIds);
-  db.prepare('DELETE FROM albums WHERE artist_id = ?').run(artistId);
+export async function getAllArtistSlugs(): Promise<{ slug: string }[]> {
+  const { data } = await supabase.from('artists').select('slug');
+  return (data ?? []) as { slug: string }[];
 }
 
-export function logRefresh(
-  artistSlug: string,
-  status: string,
-  message?: string
-): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO refresh_log (artist_slug, status, message)
-    VALUES (?, ?, ?)
-  `).run(artistSlug, status, message ?? null);
+export async function getAllAlbumSlugs(): Promise<{ artistSlug: string; albumSlug: string }[]> {
+  const { data } = await supabase
+    .from('albums')
+    .select('slug, artists!inner(slug)');
+
+  if (!data) return [];
+
+  return (data as Array<{ slug: string; artists: { slug: string } }>).map((row) => ({
+    artistSlug: row.artists.slug,
+    albumSlug: row.slug,
+  }));
 }
 
-export function searchArtists(query: string): Artist[] {
-  const db = getDb();
-  const rows = db.prepare("SELECT * FROM artists WHERE name LIKE ? LIMIT 10").all(`%${query}%`) as (Artist & { genres: string })[];
-  return rows.map(parseArtistRow);
+export async function searchArtists(query: string): Promise<Artist[]> {
+  const { data } = await supabase
+    .from('artists')
+    .select('*')
+    .ilike('name', `%${query}%`)
+    .limit(10);
+
+  return (data ?? []) as Artist[];
 }
 
-export function searchAlbums(query: string): AlbumWithScores[] {
-  const db = getDb();
-  const albumRows = db
-    .prepare(`
-      SELECT al.*, ar.name as artist_name, ar.slug as artist_slug
-      FROM albums al
-      JOIN artists ar ON ar.id = al.artist_id
-      WHERE al.title LIKE ?
-      LIMIT 10
-    `)
-    .all(`%${query}%`) as AlbumWithArtistRow[];
+export async function searchAlbums(query: string): Promise<AlbumWithScores[]> {
+  const { data: albumRows } = await supabase
+    .from('albums')
+    .select('*, artists!inner(name, slug)')
+    .ilike('title', `%${query}%`)
+    .limit(10);
 
-  return albumRows.map((row) => {
-    const scores = db
-      .prepare('SELECT * FROM scores WHERE album_id = ?')
-      .all(row.id) as ScoreRow[];
-    return buildAlbumWithScores(row, scores, getPopularity(row.id));
+  if (!albumRows?.length) return [];
+
+  const albumIds = albumRows.map((r) => r.id as number);
+  const [{ data: scores }, { data: popularity }] = await Promise.all([
+    supabase.from('scores').select('*').in('album_id', albumIds),
+    supabase.from('popularity').select('*').in('album_id', albumIds),
+  ]);
+
+  return (albumRows as AlbumRowWithArtist[]).map((row) => {
+    const albumScores = ((scores ?? []) as Score[]).filter((s) => s.album_id === row.id);
+    const albumPop = ((popularity ?? []) as PopularityData[]).find((p) => p.album_id === row.id) ?? null;
+    return buildAlbumWithScores(row, albumScores, albumPop);
   });
 }
 
-export function getAllArtistSlugs(): { slug: string }[] {
-  const db = getDb();
-  return db.prepare('SELECT slug FROM artists').all() as { slug: string }[];
+export async function clearArtistAlbums(artistId: number): Promise<void> {
+  const { data: albums } = await supabase
+    .from('albums')
+    .select('id')
+    .eq('artist_id', artistId);
+
+  if (!albums?.length) return;
+
+  const albumIds = albums.map((a) => a.id as number);
+
+  await Promise.all([
+    supabase.from('scores').delete().in('album_id', albumIds),
+    supabase.from('popularity').delete().in('album_id', albumIds),
+  ]);
+
+  await supabase.from('albums').delete().eq('artist_id', artistId);
 }
 
-export function getAllAlbumSlugs(): { artistSlug: string; albumSlug: string }[] {
-  const db = getDb();
-  return db
-    .prepare(`
-      SELECT ar.slug as artistSlug, al.slug as albumSlug
-      FROM albums al
-      JOIN artists ar ON ar.id = al.artist_id
-    `)
-    .all() as { artistSlug: string; albumSlug: string }[];
+export async function getArtistPopularityContext(
+  artistId: number,
+  albumId: number,
+): Promise<ArtistPopularityContext> {
+  const { data: albums } = await supabase
+    .from('albums')
+    .select('id')
+    .eq('artist_id', artistId);
+
+  if (!albums?.length) {
+    return { maxDeezer: null, maxListeners: null, totalAlbums: 0, deezerRank: null, listenersRank: null };
+  }
+
+  const albumIds = albums.map((a) => a.id as number);
+
+  const { data: rows } = await supabase
+    .from('popularity')
+    .select('album_id, deezer_fans, lastfm_listeners')
+    .in('album_id', albumIds);
+
+  if (!rows?.length) {
+    return { maxDeezer: null, maxListeners: null, totalAlbums: albums.length, deezerRank: null, listenersRank: null };
+  }
+
+  type PopRow = { album_id: number; deezer_fans: number | null; lastfm_listeners: number | null };
+  const popRows = rows as PopRow[];
+
+  const deezerSorted = popRows
+    .filter((r) => r.deezer_fans != null)
+    .sort((a, b) => (b.deezer_fans ?? 0) - (a.deezer_fans ?? 0));
+  const listenersSorted = popRows
+    .filter((r) => r.lastfm_listeners != null)
+    .sort((a, b) => (b.lastfm_listeners ?? 0) - (a.lastfm_listeners ?? 0));
+
+  return {
+    maxDeezer: deezerSorted[0]?.deezer_fans ?? null,
+    maxListeners: listenersSorted[0]?.lastfm_listeners ?? null,
+    totalAlbums: albums.length,
+    deezerRank: deezerSorted.findIndex((r) => r.album_id === albumId) + 1 || null,
+    listenersRank: listenersSorted.findIndex((r) => r.album_id === albumId) + 1 || null,
+  };
 }

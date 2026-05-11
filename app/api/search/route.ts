@@ -10,8 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const artists = searchArtists(q);
-    const albums = searchAlbums(q);
+    const [artists, albums] = await Promise.all([searchArtists(q), searchAlbums(q)]);
     return NextResponse.json({ artists, albums });
   } catch (err) {
     console.error('[api/search] Error:', err);

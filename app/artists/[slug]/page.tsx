@@ -5,10 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export const dynamicParams = false;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const slugs = getAllArtistSlugs();
+  const slugs = await getAllArtistSlugs();
   return slugs.map((row) => ({ slug: row.slug }));
 }
 
@@ -18,7 +18,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const artist = getArtistBySlug(slug);
+  const artist = await getArtistBySlug(slug);
   if (!artist) return { title: 'Artista Não Encontrado' };
   return {
     title: `${artist.name} — Álbuns | ScoreStack`,
@@ -86,10 +86,10 @@ export default async function ArtistPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const artist = getArtistBySlug(slug);
+  const artist = await getArtistBySlug(slug);
   if (!artist) notFound();
 
-  const albums: AlbumWithScores[] = getAlbumsByArtist(artist.id).sort((a, b) => {
+  const albums: AlbumWithScores[] = (await getAlbumsByArtist(artist.id)).sort((a, b) => {
     if (a.aggregateScore === null && b.aggregateScore === null) return 0;
     if (a.aggregateScore === null) return 1;
     if (b.aggregateScore === null) return -1;

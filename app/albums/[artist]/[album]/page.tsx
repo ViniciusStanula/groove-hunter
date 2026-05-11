@@ -5,10 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-export const dynamicParams = false;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const pairs = getAllAlbumSlugs();
+  const pairs = await getAllAlbumSlugs();
   return pairs.map((p) => ({ artist: p.artistSlug, album: p.albumSlug }));
 }
 
@@ -18,7 +18,7 @@ export async function generateMetadata({
   params: Promise<{ artist: string; album: string }>;
 }): Promise<Metadata> {
   const { artist, album } = await params;
-  const data = getAlbumWithScores(artist, album);
+  const data = await getAlbumWithScores(artist, album);
   if (!data) return { title: 'Álbum Não Encontrado' };
   return {
     title: `${data.title} por ${data.artistName} — ScoreStack`,
@@ -220,10 +220,10 @@ export default async function AlbumPage({
   params: Promise<{ artist: string; album: string }>;
 }) {
   const { artist, album } = await params;
-  const data = getAlbumWithScores(artist, album);
+  const data = await getAlbumWithScores(artist, album);
   if (!data) notFound();
 
-  const popContext = getArtistPopularityContext(data.artist_id, data.id);
+  const popContext = await getArtistPopularityContext(data.artist_id, data.id);
 
   const allScores = CRITIC_SOURCES.map(
     (src) => data.scores.find((s) => s.source === src)
